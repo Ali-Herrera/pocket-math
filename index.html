@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Budget Web App</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>💰 Budget Web App</h1>
+        <div class="header-actions">
+          <button id="exportBtn" class="btn-secondary">Export Data</button>
+          <button id="importBtn" class="btn-secondary">Import Data</button>
+          <input
+            type="file"
+            id="importFile"
+            accept=".json"
+            style="display: none;"
+          />
+          <button id="clearBtn" class="btn-danger">Clear All Data</button>
+        </div>
+      </header>
+
+      <!-- Month Navigation -->
+      <nav class="month-navigator card" id="monthNavigator">
+        <!-- Content rendered dynamically by renderMonthNavigator() -->
+      </nav>
+
+      <!-- Income Section -->
+      <section class="card income-section">
+        <h2>Monthly Income</h2>
+        <div class="income-columns" id="incomeColumns">
+          <div class="income-person">
+            <div class="input-group">
+              <label for="spouse1Name">Person 1 Name:</label>
+              <input type="text" id="spouse1Name" placeholder="Name" />
+            </div>
+            <div class="paychecks-label">Paychecks:</div>
+            <div id="spouse1Paychecks" class="paychecks-list"></div>
+            <button id="addPaycheck1Btn" class="btn-add-sm">
+              + Add Paycheck
+            </button>
+            <div class="person-total">
+              Subtotal: <span id="spouse1Total">$0.00</span>
+            </div>
+          </div>
+          <div class="income-person" id="person2Container">
+            <div class="input-group">
+              <label for="spouse2Name">Person 2 Name:</label>
+              <input type="text" id="spouse2Name" placeholder="Name" />
+            </div>
+            <div class="paychecks-label">Paychecks:</div>
+            <div id="spouse2Paychecks" class="paychecks-list"></div>
+            <button id="addPaycheck2Btn" class="btn-add-sm">
+              + Add Paycheck
+            </button>
+            <div class="person-total">
+              Subtotal: <span id="spouse2Total">$0.00</span>
+            </div>
+          </div>
+        </div>
+        <button id="addPersonBtn" class="btn-add add-person-btn">
+          + Add Person 2
+        </button>
+        <div class="section-total">
+          Total Monthly Income: <span id="totalIncome">$0.00</span>
+        </div>
+      </section>
+
+      <!-- Required Bills Section -->
+      <section class="card bills-section">
+        <h2>Required Bills</h2>
+        <div id="requiredBillsList" class="items-list"></div>
+        <button id="addBillBtn" class="btn-add">+ Add Required Bill</button>
+        <div class="section-total">
+          Total Bills: <span id="totalBills">$0.00</span>
+        </div>
+      </section>
+
+      <!-- Other Expenses Section -->
+      <section class="card expenses-section">
+        <h2>Other Expenses</h2>
+        <div id="otherExpensesList" class="items-list"></div>
+        <button id="addExpenseBtn" class="btn-add">+ Add Expense</button>
+        <div class="section-total">
+          Total Expenses: <span id="totalExpenses">$0.00</span>
+        </div>
+      </section>
+
+      <!-- Savings Section -->
+      <section class="card savings-section">
+        <h2>Savings</h2>
+        <div id="savingsList" class="items-list"></div>
+        <button id="addSavingsBtn" class="btn-add">+ Add Savings</button>
+        <div class="section-total">
+          Total Savings: <span id="totalSavings">$0.00</span>
+        </div>
+      </section>
+
+      <!-- Debt Section -->
+      <section class="card debt-section">
+        <h2>Debts</h2>
+        <div id="debtsList" class="items-list"></div>
+        <button id="addDebtBtn" class="btn-add">+ Add Debt</button>
+        <div class="debt-summary" id="debtSummary">
+          <p>
+            <strong>Total Monthly Payment:</strong>
+            <span id="monthlyPayment">$0.00</span>
+          </p>
+          <p>
+            <strong>Payoff Date (Latest, Minimum):</strong>
+            <span id="payoffDateMin">-</span>
+          </p>
+          <p>
+            <strong>Payoff Date (Latest, With Extra):</strong>
+            <span id="payoffDateExtra">-</span>
+          </p>
+          <p>
+            <strong>Total Interest (Minimum):</strong>
+            <span id="totalInterestMin">$0.00</span>
+          </p>
+          <p>
+            <strong>Total Interest (With Extra):</strong>
+            <span id="totalInterestExtra">$0.00</span>
+          </p>
+          <p>
+            <strong>Interest Saved (Total):</strong>
+            <span id="interestSaved">$0.00</span>
+          </p>
+        </div>
+      </section>
+
+      <!-- Monthly Tracking Section -->
+      <section class="card tracking-section">
+        <h2>Monthly Tracking</h2>
+        <p>
+          Record your actual expenses at the end of each month to compare with
+          predictions.
+        </p>
+        <button id="endMonthBtn" class="btn-primary">
+          End of Month - Record Actuals
+        </button>
+        <div id="monthlyComparison" class="monthly-comparison"></div>
+      </section>
+
+      <!-- Summary Section -->
+      <section class="card summary-section">
+        <h2>Budget Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="summary-label">Total Income:</span>
+            <span class="summary-value" id="summaryIncome">$0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Total Required Bills:</span>
+            <span class="summary-value" id="summaryBills">$0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Total Other Expenses:</span>
+            <span class="summary-value" id="summaryExpenses">$0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Total Savings:</span>
+            <span class="summary-value" id="summarySavings">$0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Total Debt Payment:</span>
+            <span class="summary-value" id="summaryDebt">$0.00</span>
+          </div>
+          <div class="summary-item highlight">
+            <span class="summary-label">Remaining Balance:</span>
+            <span class="summary-value" id="summaryRemaining">$0.00</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Charts Section -->
+      <section class="card charts-section">
+        <h2>Visualizations</h2>
+        <div class="charts-grid">
+          <div class="chart-container">
+            <h3>Income vs Expenses</h3>
+            <canvas id="incomeExpensesChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <h3>Expense Breakdown</h3>
+            <canvas id="expenseBreakdownChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <h3>Debt Payoff Timeline</h3>
+            <div class="debt-chart-controls">
+              <button
+                class="btn-toggle active"
+                data-debt-timeline-mode="combined"
+                type="button"
+              >
+                Combined
+              </button>
+              <button
+                class="btn-toggle"
+                data-debt-timeline-mode="per-debt"
+                type="button"
+              >
+                Per Debt
+              </button>
+            </div>
+            <canvas id="debtTimelineChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <h3>Debt Payoff Months by Debt</h3>
+            <canvas id="debtPayoffComparisonChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <h3>Predicted vs Actual</h3>
+            <canvas id="predictedActualChart"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- End of Month Modal -->
+    <div id="endMonthModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Record Actual Expenses</h2>
+          <span class="close">&times;</span>
+        </div>
+        <div class="modal-body" id="modalBody">
+          <!-- Content will be dynamically generated -->
+        </div>
+        <div class="modal-footer">
+          <button id="cancelModal" class="btn-secondary">Cancel</button>
+          <button id="saveActuals" class="btn-primary">Save Actuals</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="debt-calculator.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
