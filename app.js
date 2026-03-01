@@ -31,6 +31,7 @@ let showSecondPersonOverride = false;
 let appState = {
   activeMonth: null,
   currentViewMonth: null,
+  navigatorYear: null,
   monthlyArchives: [],
   budgetData: null,
 };
@@ -84,23 +85,364 @@ function calculateNextMonth(monthStr) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function calculatePreviousMonth(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number);
+  const date = new Date(year, month - 2, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function formatMonthLabel(monthStr) {
   const [year, month] = monthStr.split('-').map(Number);
   const date = new Date(year, month - 1, 1);
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-function getAllMonths() {
-  const months = appState.monthlyArchives.map((a) => a.month);
-  if (!months.includes(appState.activeMonth)) {
-    months.push(appState.activeMonth);
+function getMonthsForYear(year) {
+  const months = [];
+  for (let month = 1; month <= 12; month += 1) {
+    months.push(`${year}-${String(month).padStart(2, '0')}`);
   }
+  return months;
+}
+
+function getAllMonths() {
+  const displayMonth = appState.currentViewMonth || appState.activeMonth;
+  const displayYear = Number((displayMonth || getCurrentMonth()).split('-')[0]);
+  const selectedYear = appState.navigatorYear || displayYear;
+
+  const monthSet = new Set(
+    (appState.monthlyArchives || []).map((a) => a.month),
+  );
+
+  if (appState.activeMonth) {
+    monthSet.add(appState.activeMonth);
+  }
+
+  collectHistoryMonthsFromState().forEach((month) => monthSet.add(month));
+  getMonthsForYear(selectedYear).forEach((month) => monthSet.add(month));
+
+  const months = [...monthSet].filter(
+    (month) =>
+      typeof month === 'string' &&
+      month.length > 0 &&
+      Number(month.split('-')[0]) === selectedYear,
+  );
   months.sort();
   return months;
 }
 
+function getAvailableYears() {
+  const years = new Set();
+  const collectYear = (month) => {
+    if (!month || typeof month !== 'string') return;
+    const [year] = normalizeMonthKey(month).split('-').map(Number);
+    if (year) years.add(year);
+  };
+
+  collectYear(appState.activeMonth);
+  collectYear(appState.currentViewMonth);
+  (appState.monthlyArchives || []).forEach((archive) =>
+    collectYear(archive.month),
+  );
+  collectHistoryMonthsFromState().forEach((month) => collectYear(month));
+
+  const currentYear = Number(getCurrentMonth().split('-')[0]);
+  years.add(currentYear - 1);
+  years.add(currentYear);
+  years.add(currentYear + 1);
+
+  return [...years].sort((a, b) => a - b);
+}
+
 function isLegacyFormat(parsed) {
   return parsed.income !== undefined && parsed.activeMonth === undefined;
+}
+
+function normalizeMonthKey(monthStr) {
+  if (typeof monthStr !== 'string') return monthStr;
+  const trimmed = monthStr.trim();
+
+  const yearMonth = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+  if (yearMonth) {
+    const year = yearMonth[1];
+    const month = String(Number(yearMonth[2])).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  const isoLike = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoLike) {
+    const year = isoLike[1];
+    const month = String(Number(isoLike[2])).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  const slashFormat = trimmed.match(/^(\d{1,2})\/(\d{4})$/);
+  if (slashFormat) {
+    const month = String(Number(slashFormat[1])).padStart(2, '0');
+    const year = slashFormat[2];
+    return `${year}-${month}`;
+  }
+
+  const parsedDate = new Date(trimmed);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  return monthStr;
+}
+
+function normalizeMonthlyHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .map((entry) => ({
+      ...entry,
+      month: normalizeMonthKey(entry.month),
+    }))
+    .filter(
+      (entry) => typeof entry.month === 'string' && entry.month.length > 0,
+    );
+}
+
+function collectHistoryMonthsFromState() {
+  const months = new Set();
+
+  const addHistoryMonths = (history) => {
+    normalizeMonthlyHistory(history).forEach((entry) => {
+      if (entry.month) months.add(entry.month);
+    });
+  };
+
+  addHistoryMonths(appState.budgetData?.monthlyHistory);
+  addHistoryMonths(budgetData?.monthlyHistory);
+  addHistoryMonths(appState.monthlyHistory);
+
+  if (Array.isArray(appState.monthlyArchives)) {
+    appState.monthlyArchives.forEach((archive) => {
+      addHistoryMonths(archive.monthlyHistory);
+    });
+  }
+
+  return months;
+}
+
+function getMergedMonthlyHistory() {
+  const merged = [];
+  const seenKeys = new Set();
+
+  const addHistory = (history) => {
+    normalizeMonthlyHistory(history).forEach((entry) => {
+      const key = JSON.stringify(entry);
+      if (!seenKeys.has(key)) {
+        merged.push(entry);
+        seenKeys.add(key);
+      }
+    });
+  };
+
+  addHistory(appState.budgetData?.monthlyHistory);
+  addHistory(budgetData?.monthlyHistory);
+  addHistory(appState.monthlyHistory);
+
+  if (Array.isArray(appState.monthlyArchives)) {
+    appState.monthlyArchives.forEach((archive) => {
+      addHistory(archive.monthlyHistory);
+    });
+  }
+
+  return merged;
+}
+
+function ensureArchiveForMonth(month) {
+  if (!month || month === appState.activeMonth) return;
+
+  const existingArchive = appState.monthlyArchives.find(
+    (a) => a.month === month,
+  );
+  if (existingArchive) return;
+
+  const allHistory = getMergedMonthlyHistory();
+  const monthHistory = allHistory.filter((entry) => entry.month === month);
+  const fallbackTemplate = deepCloneBudget(appState.budgetData);
+  ['spouse1', 'spouse2'].forEach((key) => {
+    fallbackTemplate.income[key].paychecks.forEach((paycheck) => {
+      paycheck.amount = 0;
+    });
+  });
+  fallbackTemplate.monthlyHistory = [];
+
+  appState.monthlyArchives.push({
+    month,
+    income: deepCloneBudget(fallbackTemplate.income),
+    requiredBills: deepCloneBudget(fallbackTemplate.requiredBills),
+    otherExpenses: deepCloneBudget(fallbackTemplate.otherExpenses),
+    savings: deepCloneBudget(fallbackTemplate.savings),
+    debts: deepCloneBudget(fallbackTemplate.debts),
+    monthlyHistory:
+      monthHistory.length > 0
+        ? deepCloneBudget(monthHistory)
+        : deepCloneBudget(fallbackTemplate.monthlyHistory),
+  });
+  appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
+}
+
+function ensureBudgetShape(container) {
+  if (!container || typeof container !== 'object') {
+    return deepCloneBudget(budgetData);
+  }
+  return {
+    income: deepCloneBudget(
+      container.income || {
+        spouse1: { name: 'Person 1', paychecks: [] },
+        spouse2: { name: 'Person 2', paychecks: [] },
+      },
+    ),
+    requiredBills: deepCloneBudget(container.requiredBills || []),
+    otherExpenses: deepCloneBudget(container.otherExpenses || []),
+    savings: deepCloneBudget(container.savings || []),
+    debts: deepCloneBudget(container.debts || []),
+    monthlyHistory: normalizeMonthlyHistory(container.monthlyHistory || []),
+  };
+}
+
+function hasMeaningfulBudgetData(container) {
+  if (!container) return false;
+
+  const spouse1Paychecks = container.income?.spouse1?.paychecks || [];
+  const spouse2Paychecks = container.income?.spouse2?.paychecks || [];
+
+  const hasPaychecks = [...spouse1Paychecks, ...spouse2Paychecks].some(
+    (paycheck) => (parseFloat(paycheck.amount) || 0) !== 0,
+  );
+
+  return (
+    hasPaychecks ||
+    (container.requiredBills || []).length > 0 ||
+    (container.otherExpenses || []).length > 0 ||
+    (container.savings || []).length > 0 ||
+    (container.debts || []).length > 0
+  );
+}
+
+function normalizeAppState() {
+  const currentMonth = getCurrentMonth();
+
+  appState.activeMonth = normalizeMonthKey(
+    appState.activeMonth || currentMonth,
+  );
+  appState.currentViewMonth = appState.currentViewMonth
+    ? normalizeMonthKey(appState.currentViewMonth)
+    : null;
+  appState.navigatorYear = Number(appState.navigatorYear) || null;
+  appState.budgetData = ensureBudgetShape(appState.budgetData);
+
+  if (!Array.isArray(appState.monthlyArchives)) {
+    appState.monthlyArchives = [];
+  }
+
+  appState.monthlyArchives = appState.monthlyArchives
+    .map((archive) => {
+      const normalizedArchive = ensureBudgetShape(archive);
+      return {
+        month: normalizeMonthKey(archive.month),
+        ...normalizedArchive,
+      };
+    })
+    .filter(
+      (archive) =>
+        typeof archive.month === 'string' && archive.month.length > 0,
+    );
+
+  const knownArchiveMonths = new Set(
+    appState.monthlyArchives.map((a) => a.month),
+  );
+  const historyMonths = collectHistoryMonthsFromState();
+
+  historyMonths.forEach((month) => {
+    if (month !== appState.activeMonth && !knownArchiveMonths.has(month)) {
+      appState.monthlyArchives.push({
+        month,
+        income: deepCloneBudget(appState.budgetData.income),
+        requiredBills: deepCloneBudget(appState.budgetData.requiredBills),
+        otherExpenses: deepCloneBudget(appState.budgetData.otherExpenses),
+        savings: deepCloneBudget(appState.budgetData.savings),
+        debts: deepCloneBudget(appState.budgetData.debts),
+        monthlyHistory: appState.budgetData.monthlyHistory.filter(
+          (h) => h.month === month,
+        ),
+      });
+      knownArchiveMonths.add(month);
+    }
+  });
+
+  appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
+
+  const hasCurrentOrFutureMonth = [
+    appState.activeMonth,
+    ...appState.monthlyArchives.map((a) => a.month),
+  ].some((month) => month >= currentMonth);
+
+  if (appState.activeMonth < currentMonth && !hasCurrentOrFutureMonth) {
+    while (appState.activeMonth < currentMonth) {
+      const existingArchiveIndex = appState.monthlyArchives.findIndex(
+        (archive) => archive.month === appState.activeMonth,
+      );
+
+      if (existingArchiveIndex === -1) {
+        appState.monthlyArchives.push({
+          month: appState.activeMonth,
+          ...deepCloneBudget(appState.budgetData),
+        });
+      } else {
+        appState.monthlyArchives[existingArchiveIndex] = {
+          month: appState.activeMonth,
+          ...deepCloneBudget(appState.budgetData),
+        };
+      }
+
+      const nextMonth = calculateNextMonth(appState.activeMonth);
+      const newBudget = deepCloneBudget(appState.budgetData);
+      ['spouse1', 'spouse2'].forEach((key) => {
+        newBudget.income[key].paychecks.forEach((paycheck) => {
+          paycheck.amount = 0;
+        });
+      });
+      newBudget.monthlyHistory = [];
+
+      appState.activeMonth = nextMonth;
+      appState.budgetData = newBudget;
+    }
+
+    appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  if (
+    appState.monthlyArchives.length === 0 &&
+    appState.activeMonth === currentMonth &&
+    hasMeaningfulBudgetData(appState.budgetData)
+  ) {
+    const previousMonth = calculatePreviousMonth(appState.activeMonth);
+    if (previousMonth && previousMonth !== appState.activeMonth) {
+      appState.monthlyArchives.push({
+        month: previousMonth,
+        ...deepCloneBudget(appState.budgetData),
+      });
+      appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
+      knownArchiveMonths.add(previousMonth);
+    }
+  }
+
+  if (
+    appState.currentViewMonth &&
+    appState.currentViewMonth !== appState.activeMonth &&
+    !knownArchiveMonths.has(appState.currentViewMonth)
+  ) {
+    appState.currentViewMonth = null;
+  }
+
+  const displayMonth =
+    appState.currentViewMonth || appState.activeMonth || currentMonth;
+  const [displayYear] = displayMonth.split('-').map(Number);
+  appState.navigatorYear = appState.navigatorYear || displayYear;
 }
 
 // Initialize app
@@ -127,6 +469,7 @@ function loadData() {
         migrateFromLegacyFormat(parsed);
       } else {
         appState = parsed;
+        normalizeAppState();
         loadMonthIntoBudgetData(appState.activeMonth);
       }
       migrateIncomeData();
@@ -238,6 +581,7 @@ function migrateFromLegacyFormat(legacyData) {
   appState = {
     activeMonth: currentMonth,
     currentViewMonth: null,
+    navigatorYear: Number(currentMonth.split('-')[0]),
     monthlyArchives: [],
     budgetData: deepCloneBudget(budgetData),
   };
@@ -266,6 +610,7 @@ function initializeNewAppState() {
   appState = {
     activeMonth: currentMonth,
     currentViewMonth: null,
+    navigatorYear: Number(currentMonth.split('-')[0]),
     monthlyArchives: [],
     budgetData: deepCloneBudget(budgetData),
   };
@@ -297,6 +642,7 @@ function loadMonthIntoBudgetData(month) {
     budgetData = buildBudgetDataFromFields(appState.budgetData);
     appState.currentViewMonth = null;
   } else {
+    ensureArchiveForMonth(month);
     const archive = appState.monthlyArchives.find((a) => a.month === month);
     if (archive) {
       budgetData = buildBudgetDataFromFields(archive);
@@ -306,11 +652,24 @@ function loadMonthIntoBudgetData(month) {
 }
 
 function switchToMonth(month) {
+  appState.navigatorYear = Number(month.split('-')[0]);
   syncBudgetDataToState();
   loadMonthIntoBudgetData(month);
   saveData();
   renderAll();
   updateAllCharts();
+}
+
+function switchNavigatorYear(year) {
+  const selectedYear = Number(year);
+  if (!selectedYear) return;
+
+  appState.navigatorYear = selectedYear;
+  const displayMonth =
+    appState.currentViewMonth || appState.activeMonth || getCurrentMonth();
+  const [, monthPart] = displayMonth.split('-');
+  const targetMonth = `${selectedYear}-${monthPart}`;
+  switchToMonth(targetMonth);
 }
 
 function startNewMonth() {
@@ -375,6 +734,7 @@ function importData(file) {
         migrateFromLegacyFormat(parsed);
       } else {
         appState = parsed;
+        normalizeAppState();
         loadMonthIntoBudgetData(appState.activeMonth);
       }
       migrateIncomeData();
@@ -727,12 +1087,22 @@ function renderMonthNavigator() {
 
   const allMonths = getAllMonths();
   const displayMonth = appState.currentViewMonth || appState.activeMonth;
+  const availableYears = getAvailableYears();
+  const selectedYear =
+    appState.navigatorYear || Number(displayMonth.split('-')[0]);
 
   let html = '';
 
   const currentIndex = allMonths.indexOf(displayMonth);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < allMonths.length - 1;
+
+  html += '<select id="yearSelector" class="month-selector">';
+  availableYears.forEach((year) => {
+    const selected = year === selectedYear ? 'selected' : '';
+    html += `<option value="${year}" ${selected}>${year}</option>`;
+  });
+  html += '</select>';
 
   html += `<button class="month-nav-btn" id="prevMonthBtn" ${hasPrev ? '' : 'disabled'}>&#9664;</button>`;
 
@@ -751,11 +1121,17 @@ function renderMonthNavigator() {
   if (displayMonth === appState.activeMonth) {
     html +=
       '<button class="btn-primary month-new-btn" id="startNewMonthBtn">Start New Month</button>';
+  } else if (displayMonth > appState.activeMonth) {
+    html += '<span class="viewing-archive-label">Viewing future month</span>';
   } else {
     html += '<span class="viewing-archive-label">Viewing archived month</span>';
   }
 
   container.innerHTML = html;
+
+  document.getElementById('yearSelector').addEventListener('change', (e) => {
+    switchNavigatorYear(e.target.value);
+  });
 
   document.getElementById('monthSelector').addEventListener('change', (e) => {
     switchToMonth(e.target.value);
