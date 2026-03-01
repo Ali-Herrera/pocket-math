@@ -428,6 +428,27 @@ input[type='number']:focus {
   justify-self: end;
 }
 
+.debt-item {
+  background: var(--bg-color);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.debt-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.debt-item .btn-delete {
+  align-self: flex-end;
+  margin-top: 5px;
+}
+
 /* Buttons */
 button {
   cursor: pointer;
@@ -649,7 +670,8 @@ button {
   }
 
   .income-columns,
-  .debt-inputs {
+  .debt-inputs,
+  .debt-item-grid {
     grid-template-columns: 1fr;
   }
 }

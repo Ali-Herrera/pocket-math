@@ -1257,18 +1257,35 @@ function renderDebts() {
 
   budgetData.debts.forEach((debt) => {
     const row = document.createElement('div');
-    row.className = 'debt-row';
+    row.className = 'debt-item';
     row.innerHTML = `
-            <input type="text" placeholder="Debt name" value="${debt.name}"
-                onchange="updateDebtItem('${debt.id}', 'name', this.value)">
-            <input type="number" placeholder="Principal" step="0.01" min="0" value="${debt.principal}"
-                onchange="updateDebtItem('${debt.id}', 'principal', this.value)">
-            <input type="number" placeholder="Interest %" step="0.01" min="0" value="${debt.interestRate}"
-                onchange="updateDebtItem('${debt.id}', 'interestRate', this.value)">
-            <input type="number" placeholder="Min payment" step="0.01" min="0" value="${debt.minimumPayment}"
-                onchange="updateDebtItem('${debt.id}', 'minimumPayment', this.value)">
-            <input type="number" placeholder="Extra payment" step="0.01" min="0" value="${debt.extraPayment}"
-                onchange="updateDebtItem('${debt.id}', 'extraPayment', this.value)">
+            <div class="debt-item-grid">
+                <div class="input-group">
+                    <label>Debt Name</label>
+                    <input type="text" placeholder="e.g., Credit Card" value="${debt.name}"
+                        onchange="updateDebtItem('${debt.id}', 'name', this.value)">
+                </div>
+                <div class="input-group">
+                    <label>Principal Amount</label>
+                    <input type="number" placeholder="0.00" step="0.01" min="0" value="${debt.principal}"
+                        onchange="updateDebtItem('${debt.id}', 'principal', this.value)">
+                </div>
+                <div class="input-group">
+                    <label>Interest Rate (%)</label>
+                    <input type="number" placeholder="0.00" step="0.01" min="0" value="${debt.interestRate}"
+                        onchange="updateDebtItem('${debt.id}', 'interestRate', this.value)">
+                </div>
+                <div class="input-group">
+                    <label>Minimum Payment</label>
+                    <input type="number" placeholder="0.00" step="0.01" min="0" value="${debt.minimumPayment}"
+                        onchange="updateDebtItem('${debt.id}', 'minimumPayment', this.value)">
+                </div>
+                <div class="input-group">
+                    <label>Extra Payment</label>
+                    <input type="number" placeholder="0.00" step="0.01" min="0" value="${debt.extraPayment}"
+                        onchange="updateDebtItem('${debt.id}', 'extraPayment', this.value)">
+                </div>
+            </div>
             <button class="btn-delete" onclick="deleteDebt('${debt.id}')">Delete</button>
         `;
     container.appendChild(row);
