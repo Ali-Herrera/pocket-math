@@ -12,6 +12,7 @@ let budgetData = {
   otherExpenses: [],
   savings: [],
   debts: [],
+  investments: [],
   monthlyHistory: [],
 };
 
@@ -22,6 +23,7 @@ let charts = {
   debtTimeline: null,
   debtPayoffComparison: null,
   predictedActual: null,
+  investmentGrowth: null,
 };
 
 let debtTimelineMode = 'combined';
@@ -49,6 +51,7 @@ function extractBudgetFields(data) {
     otherExpenses: deepCloneBudget(data.otherExpenses),
     savings: deepCloneBudget(data.savings),
     debts: deepCloneBudget(data.debts || []),
+    investments: deepCloneBudget(data.investments || []),
     monthlyHistory: deepCloneBudget(data.monthlyHistory || []),
   };
 }
@@ -75,6 +78,7 @@ function buildBudgetDataFromFields(fields) {
     otherExpenses: deepCloneBudget(fields.otherExpenses),
     savings: deepCloneBudget(fields.savings),
     debts: deepCloneBudget(debts),
+    investments: deepCloneBudget(fields.investments || []),
     monthlyHistory: deepCloneBudget(fields.monthlyHistory || []),
   };
 }
@@ -277,6 +281,7 @@ function ensureArchiveForMonth(month) {
     otherExpenses: deepCloneBudget(fallbackTemplate.otherExpenses),
     savings: deepCloneBudget(fallbackTemplate.savings),
     debts: deepCloneBudget(fallbackTemplate.debts),
+    investments: deepCloneBudget(fallbackTemplate.investments || []),
     monthlyHistory:
       monthHistory.length > 0
         ? deepCloneBudget(monthHistory)
@@ -300,6 +305,7 @@ function ensureBudgetShape(container) {
     otherExpenses: deepCloneBudget(container.otherExpenses || []),
     savings: deepCloneBudget(container.savings || []),
     debts: deepCloneBudget(container.debts || []),
+    investments: deepCloneBudget(container.investments || []),
     monthlyHistory: normalizeMonthlyHistory(container.monthlyHistory || []),
   };
 }
@@ -319,7 +325,8 @@ function hasMeaningfulBudgetData(container) {
     (container.requiredBills || []).length > 0 ||
     (container.otherExpenses || []).length > 0 ||
     (container.savings || []).length > 0 ||
-    (container.debts || []).length > 0
+    (container.debts || []).length > 0 ||
+    (container.investments || []).length > 0
   );
 }
 
@@ -366,6 +373,7 @@ function normalizeAppState() {
         otherExpenses: deepCloneBudget(appState.budgetData.otherExpenses),
         savings: deepCloneBudget(appState.budgetData.savings),
         debts: deepCloneBudget(appState.budgetData.debts),
+        investments: deepCloneBudget(appState.budgetData.investments || []),
         monthlyHistory: appState.budgetData.monthlyHistory.filter(
           (h) => h.month === month,
         ),
@@ -1016,6 +1024,58 @@ function deleteDebt(id) {
   }
 }
 
+// Investments
+function addInvestment() {
+  const investment = {
+    id: generateUUID(),
+    name: '',
+    currentBalance: 0,
+    monthlyContribution: 0,
+    employerContribution: 0,
+    annualRate: 0,
+  };
+  budgetData.investments.push(investment);
+  renderInvestments();
+  saveData();
+}
+
+function updateInvestmentItem(id, field, value) {
+  const investment = budgetData.investments.find((inv) => inv.id === id);
+  if (investment) {
+    if (
+      ['currentBalance', 'monthlyContribution', 'employerContribution', 'annualRate'].includes(field)
+    ) {
+      investment[field] = parseFloat(value) || 0;
+    } else {
+      investment[field] = value;
+    }
+    saveData();
+    updateSummary();
+    updateAllCharts();
+  }
+}
+
+function applyEmployerMatchHelper(id) {
+  const salary = parseFloat(document.getElementById(`helperSalary-${id}`)?.value) || 0;
+  const pct = parseFloat(document.getElementById(`helperPct-${id}`)?.value) || 0;
+  const monthly = (salary * (pct / 100)) / 12;
+  const input = document.getElementById(`employerContrib-${id}`);
+  if (input) {
+    input.value = monthly.toFixed(2);
+    updateInvestmentItem(id, 'employerContribution', monthly);
+  }
+}
+
+function deleteInvestment(id) {
+  if (confirm('Delete this investment account?')) {
+    budgetData.investments = budgetData.investments.filter((inv) => inv.id !== id);
+    renderInvestments();
+    saveData();
+    updateSummary();
+    updateAllCharts();
+  }
+}
+
 // ============ Calculations ============
 
 function calculateTotalIncome() {
@@ -1058,13 +1118,21 @@ function calculateTotalDebtPayment() {
   }, 0);
 }
 
+function calculateTotalInvestmentContribution() {
+  return (budgetData.investments || []).reduce(
+    (sum, inv) => sum + (inv.monthlyContribution || 0),
+    0,
+  );
+}
+
 function calculateRemainingBalance() {
   const income = calculateTotalIncome();
   const bills = calculateTotalRequiredBills();
   const expenses = calculateTotalOtherExpenses();
   const savings = calculateTotalSavings();
   const debt = calculateTotalDebtPayment();
-  return income - bills - expenses - savings - debt;
+  const investments = calculateTotalInvestmentContribution();
+  return income - bills - expenses - savings - debt - investments;
 }
 
 // ============ Rendering ============
@@ -1077,6 +1145,7 @@ function renderAll() {
   renderSavings();
   renderDebts();
   updateDebtSummary();
+  renderInvestments();
   updateSummary();
   renderMonthlyComparison();
 }
@@ -1389,6 +1458,64 @@ function updateDebtSummary() {
   }
 }
 
+function renderInvestments() {
+  const container = document.getElementById('investmentsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  (budgetData.investments || []).forEach((inv) => {
+    const row = document.createElement('div');
+    row.className = 'investment-item';
+    row.innerHTML = `
+      <div class="investment-item-grid">
+        <div class="input-group">
+          <label>Account Name</label>
+          <input type="text" placeholder="e.g., 401(k)" value="${inv.name}"
+            onchange="updateInvestmentItem('${inv.id}', 'name', this.value)">
+        </div>
+        <div class="input-group">
+          <label>Current Balance</label>
+          <input type="number" placeholder="0.00" step="0.01" min="0" value="${inv.currentBalance}"
+            onchange="updateInvestmentItem('${inv.id}', 'currentBalance', this.value)">
+        </div>
+        <div class="input-group">
+          <label>Your Monthly Contribution</label>
+          <input type="number" placeholder="0.00" step="0.01" min="0" value="${inv.monthlyContribution}"
+            onchange="updateInvestmentItem('${inv.id}', 'monthlyContribution', this.value)">
+        </div>
+        <div class="input-group">
+          <label>Employer Contribution (monthly)</label>
+          <input type="number" placeholder="0.00" step="0.01" min="0" value="${inv.employerContribution}"
+            id="employerContrib-${inv.id}"
+            onchange="updateInvestmentItem('${inv.id}', 'employerContribution', this.value)">
+          <details class="employer-match-helper">
+            <summary>Calculate from salary &amp; match %</summary>
+            <div class="employer-match-inputs">
+              <input type="number" placeholder="Annual salary" step="1" min="0"
+                id="helperSalary-${inv.id}">
+              <input type="number" placeholder="Match %" step="0.1" min="0" max="100"
+                id="helperPct-${inv.id}">
+              <button type="button" class="btn-secondary btn-sm"
+                onclick="applyEmployerMatchHelper('${inv.id}')">Apply</button>
+            </div>
+          </details>
+        </div>
+        <div class="input-group">
+          <label>Expected Annual Return (%)</label>
+          <input type="number" placeholder="0.00" step="0.01" min="0" value="${inv.annualRate}"
+            onchange="updateInvestmentItem('${inv.id}', 'annualRate', this.value)">
+        </div>
+      </div>
+      <button class="btn-delete" onclick="deleteInvestment('${inv.id}')">Delete</button>
+    `;
+    container.appendChild(row);
+  });
+
+  const total = calculateTotalInvestmentContribution();
+  const totalEl = document.getElementById('totalInvestments');
+  if (totalEl) totalEl.textContent = formatCurrency(total);
+}
+
 function updateSummary() {
   const income = calculateTotalIncome();
   const bills = calculateTotalRequiredBills();
@@ -1397,6 +1524,8 @@ function updateSummary() {
   const debt = calculateTotalDebtPayment();
   const remaining = calculateRemainingBalance();
 
+  const investments = calculateTotalInvestmentContribution();
+
   document.getElementById('summaryIncome').textContent = formatCurrency(income);
   document.getElementById('summaryBills').textContent = formatCurrency(bills);
   document.getElementById('summaryExpenses').textContent =
@@ -1404,6 +1533,8 @@ function updateSummary() {
   document.getElementById('summarySavings').textContent =
     formatCurrency(savings);
   document.getElementById('summaryDebt').textContent = formatCurrency(debt);
+  const summaryInvestmentsEl = document.getElementById('summaryInvestments');
+  if (summaryInvestmentsEl) summaryInvestmentsEl.textContent = formatCurrency(investments);
   document.getElementById('summaryRemaining').textContent =
     formatCurrency(remaining);
 
@@ -1645,6 +1776,7 @@ function updateAllCharts() {
   updateDebtTimelineChart();
   updateDebtPayoffComparisonChart();
   updatePredictedActualChart();
+  updateInvestmentGrowthChart();
 }
 
 function updateIncomeExpensesChart() {
@@ -2231,6 +2363,134 @@ function updatePredictedActualChart() {
   });
 }
 
+function updateInvestmentGrowthChart() {
+  const ctx = document.getElementById('investmentGrowthChart');
+  if (!ctx) return;
+
+  if (charts.investmentGrowth) {
+    charts.investmentGrowth.destroy();
+  }
+
+  const investments = budgetData.investments || [];
+  const activeInvestments = investments.filter(
+    (inv) => inv.currentBalance > 0 || inv.monthlyContribution > 0 || inv.employerContribution > 0,
+  );
+
+  const years = 30;
+  const months = years * 12;
+  const yearLabels = Array.from({ length: years + 1 }, (_, i) => `Year ${i}`);
+
+  if (activeInvestments.length === 0) {
+    charts.investmentGrowth = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: yearLabels,
+        datasets: [{ label: 'No investment data', data: Array(years + 1).fill(0) }],
+      },
+      options: { responsive: true, maintainAspectRatio: true },
+    });
+    return;
+  }
+
+  const investmentColors = [
+    'rgba(16, 185, 129, 1)',
+    'rgba(59, 130, 246, 1)',
+    'rgba(245, 158, 11, 1)',
+    'rgba(139, 92, 246, 1)',
+    'rgba(236, 72, 153, 1)',
+    'rgba(20, 184, 166, 1)',
+  ];
+
+  const datasets = [];
+
+  // Per-account lines
+  activeInvestments.forEach((inv, index) => {
+    const monthlyRate = (inv.annualRate || 0) / 100 / 12;
+    const yearlyData = [inv.currentBalance];
+    let balance = inv.currentBalance;
+
+    for (let m = 1; m <= months; m++) {
+      balance = balance * (1 + monthlyRate) + (inv.monthlyContribution || 0) + (inv.employerContribution || 0);
+      if (m % 12 === 0) {
+        yearlyData.push(balance);
+      }
+    }
+
+    const color = investmentColors[index % investmentColors.length];
+    datasets.push({
+      label: inv.name || `Account ${index + 1}`,
+      data: yearlyData,
+      borderColor: color,
+      backgroundColor: color.replace('1)', '0.1)'),
+      tension: 0.3,
+      fill: false,
+    });
+  });
+
+  // Combined total line (only when more than one account)
+  if (activeInvestments.length > 1) {
+    const combinedYearlyData = Array(years + 1).fill(0);
+    combinedYearlyData[0] = activeInvestments.reduce((sum, inv) => sum + (inv.currentBalance || 0), 0);
+
+    activeInvestments.forEach((inv) => {
+      const monthlyRate = (inv.annualRate || 0) / 100 / 12;
+      let balance = inv.currentBalance || 0;
+      for (let m = 1; m <= months; m++) {
+        balance = balance * (1 + monthlyRate) + (inv.monthlyContribution || 0) + (inv.employerContribution || 0);
+        if (m % 12 === 0) {
+          combinedYearlyData[m / 12] += balance;
+        }
+      }
+    });
+
+    datasets.push({
+      label: 'Total Portfolio',
+      data: combinedYearlyData,
+      borderColor: 'rgba(30, 30, 30, 0.85)',
+      backgroundColor: 'rgba(30, 30, 30, 0.05)',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      tension: 0.3,
+      fill: false,
+    });
+  }
+
+  charts.investmentGrowth = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: yearLabels,
+      datasets: datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              return `${context.dataset.label}: $${Math.round(context.raw).toLocaleString()}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Years' } },
+        y: {
+          title: { display: true, text: 'Balance ($)' },
+          ticks: {
+            callback: function (value) {
+              if (value >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M';
+              if (value >= 1000) return '$' + (value / 1000).toFixed(0) + 'K';
+              return '$' + value.toLocaleString();
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 function setDebtTimelineMode(mode) {
   debtTimelineMode = mode;
   document.querySelectorAll('[data-debt-timeline-mode]').forEach((button) => {
@@ -2276,6 +2536,9 @@ function initializeEventListeners() {
 
   // Debt
   document.getElementById('addDebtBtn').addEventListener('click', addDebt);
+
+  // Investments
+  document.getElementById('addInvestmentBtn').addEventListener('click', addInvestment);
   document.querySelectorAll('[data-debt-timeline-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       setDebtTimelineMode(button.dataset.debtTimelineMode);

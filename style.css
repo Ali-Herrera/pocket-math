@@ -15,6 +15,8 @@
   --savings-light: #ede9fe;
   --debt-color: #ef4444;
   --debt-light: #fee2e2;
+  --investment-color: #0ea5e9;
+  --investment-light: #e0f2fe;
   --bg-color: #f3f4f6;
   --card-bg: #ffffff;
   --text-primary: #1f2937;
@@ -251,6 +253,64 @@ header h1 {
 
 .debt-summary p {
   margin-bottom: 8px;
+}
+
+/* Investment Section */
+.investment-section {
+  border-left: 4px solid var(--investment-color);
+}
+
+.investment-item {
+  background: var(--bg-color);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.investment-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.investment-item .btn-delete {
+  align-self: flex-end;
+  margin-top: 5px;
+}
+
+.employer-match-helper {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.employer-match-helper summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.employer-match-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.employer-match-inputs input {
+  width: 130px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.chart-container--wide {
+  grid-column: 1 / -1;
 }
 
 /* Tracking Section */

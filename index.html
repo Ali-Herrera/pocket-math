@@ -133,6 +133,16 @@
         </div>
       </section>
 
+      <!-- Investments Section -->
+      <section class="card investment-section">
+        <h2>Investment Accounts</h2>
+        <div id="investmentsList" class="items-list"></div>
+        <button id="addInvestmentBtn" class="btn-add">+ Add Investment Account</button>
+        <div class="section-total">
+          Total Monthly Contributions: <span id="totalInvestments">$0.00</span>
+        </div>
+      </section>
+
       <!-- Monthly Tracking Section -->
       <section class="card tracking-section">
         <h2>Monthly Tracking</h2>
@@ -169,6 +179,10 @@
           <div class="summary-item">
             <span class="summary-label">Total Debt Payment:</span>
             <span class="summary-value" id="summaryDebt">$0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Total Investment Contributions:</span>
+            <span class="summary-value" id="summaryInvestments">$0.00</span>
           </div>
           <div class="summary-item highlight">
             <span class="summary-label">Remaining Balance:</span>
@@ -216,6 +230,10 @@
           <div class="chart-container">
             <h3>Predicted vs Actual</h3>
             <canvas id="predictedActualChart"></canvas>
+          </div>
+          <div class="chart-container chart-container--wide">
+            <h3>Investment Growth (30 Years)</h3>
+            <canvas id="investmentGrowthChart"></canvas>
           </div>
         </div>
       </section>
