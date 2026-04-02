@@ -459,7 +459,28 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeEventListeners();
   renderAll();
   updateAllCharts();
+  checkAndPromptMonthAdvance();
 });
+
+function checkAndPromptMonthAdvance() {
+  const currentMonth = getCurrentMonth();
+  if (!appState.activeMonth || appState.activeMonth >= currentMonth) return;
+
+  const activeLabel = formatMonthLabel(appState.activeMonth);
+  const currentLabel = formatMonthLabel(currentMonth);
+
+  if (!confirm(`Your budget is currently set to ${activeLabel}, but it's now ${currentLabel}. Advance to ${currentLabel}?`)) {
+    return;
+  }
+
+  while (appState.activeMonth < currentMonth) {
+    advanceOneMonth();
+  }
+
+  saveData();
+  renderAll();
+  updateAllCharts();
+}
 
 // ============ Data Persistence ============
 
@@ -680,42 +701,54 @@ function switchNavigatorYear(year) {
   switchToMonth(targetMonth);
 }
 
+// Advance activeMonth by one, preserving any data already entered for the next month.
+function advanceOneMonth() {
+  const nextMonth = calculateNextMonth(appState.activeMonth);
+
+  syncBudgetDataToState();
+
+  // Archive the current active month (avoid duplicates)
+  const alreadyArchived = appState.monthlyArchives.some((a) => a.month === appState.activeMonth);
+  if (!alreadyArchived) {
+    appState.monthlyArchives.push({
+      month: appState.activeMonth,
+      ...deepCloneBudget(appState.budgetData),
+    });
+    appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  // Use existing archive for next month if available, otherwise build a blank copy
+  const existingIndex = appState.monthlyArchives.findIndex((a) => a.month === nextMonth);
+  let newBudget;
+  if (existingIndex >= 0) {
+    newBudget = buildBudgetDataFromFields(appState.monthlyArchives[existingIndex]);
+    appState.monthlyArchives.splice(existingIndex, 1);
+  } else {
+    newBudget = deepCloneBudget(appState.budgetData);
+    newBudget.monthlyHistory = [];
+  }
+
+  appState.activeMonth = nextMonth;
+  appState.budgetData = newBudget;
+  appState.currentViewMonth = null;
+  budgetData = buildBudgetDataFromFields(newBudget);
+}
+
 function startNewMonth() {
   const nextMonth = calculateNextMonth(appState.activeMonth);
   const activeLabel = formatMonthLabel(appState.activeMonth);
   const nextLabel = formatMonthLabel(nextMonth);
 
-  if (
-    !confirm(
-      `Archive ${activeLabel} and start ${nextLabel}?\n\nThe current month's budget will be saved and a new month will be created with the same structure but paycheck amounts reset to $0.`,
-    )
-  ) {
+  const hasExisting = appState.monthlyArchives.some((a) => a.month === nextMonth);
+  const message = hasExisting
+    ? `Archive ${activeLabel} and switch to ${nextLabel}?\n\nYour existing ${nextLabel} data will be kept as-is.`
+    : `Archive ${activeLabel} and start ${nextLabel}?\n\nThe current month's budget will be saved and a new month will be created carrying over the same structure and amounts.`;
+
+  if (!confirm(message)) {
     return;
   }
 
-  syncBudgetDataToState();
-
-  // Archive the current active month
-  appState.monthlyArchives.push({
-    month: appState.activeMonth,
-    ...deepCloneBudget(appState.budgetData),
-  });
-  appState.monthlyArchives.sort((a, b) => a.month.localeCompare(b.month));
-
-  // Build new month: copy structure, reset paycheck amounts, clear monthlyHistory
-  const newBudget = deepCloneBudget(appState.budgetData);
-  ['spouse1', 'spouse2'].forEach((key) => {
-    newBudget.income[key].paychecks.forEach((p) => {
-      p.amount = 0;
-    });
-  });
-  newBudget.monthlyHistory = [];
-
-  appState.activeMonth = nextMonth;
-  appState.budgetData = newBudget;
-  appState.currentViewMonth = null;
-
-  budgetData = buildBudgetDataFromFields(newBudget);
+  advanceOneMonth();
   saveData();
   renderAll();
   updateAllCharts();
@@ -1033,6 +1066,7 @@ function addInvestment() {
     monthlyContribution: 0,
     employerContribution: 0,
     annualRate: 0,
+    deductedFromPaycheck: false,
   };
   budgetData.investments.push(investment);
   renderInvestments();
@@ -1046,6 +1080,8 @@ function updateInvestmentItem(id, field, value) {
       ['currentBalance', 'monthlyContribution', 'employerContribution', 'annualRate'].includes(field)
     ) {
       investment[field] = parseFloat(value) || 0;
+    } else if (field === 'deductedFromPaycheck') {
+      investment[field] = Boolean(value);
     } else {
       investment[field] = value;
     }
@@ -1120,7 +1156,7 @@ function calculateTotalDebtPayment() {
 
 function calculateTotalInvestmentContribution() {
   return (budgetData.investments || []).reduce(
-    (sum, inv) => sum + (inv.monthlyContribution || 0),
+    (sum, inv) => sum + (inv.deductedFromPaycheck ? 0 : (inv.monthlyContribution || 0)),
     0,
   );
 }
@@ -1504,6 +1540,14 @@ function renderInvestments() {
           <label>Expected Annual Return (%)</label>
           <input type="number" placeholder="0.00" step="0.01" min="0" value="${inv.annualRate}"
             onchange="updateInvestmentItem('${inv.id}', 'annualRate', this.value)">
+        </div>
+        <div class="input-group investment-paycheck-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" ${inv.deductedFromPaycheck ? 'checked' : ''}
+              onchange="updateInvestmentItem('${inv.id}', 'deductedFromPaycheck', this.checked)">
+            Already deducted from paycheck
+          </label>
+          <span class="toggle-hint">${inv.deductedFromPaycheck ? 'Not counted in monthly spending' : 'Counted in monthly spending'}</span>
         </div>
       </div>
       <button class="btn-delete" onclick="deleteInvestment('${inv.id}')">Delete</button>

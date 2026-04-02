@@ -281,6 +281,32 @@ header h1 {
   margin-top: 5px;
 }
 
+.investment-paycheck-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.toggle-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
 .employer-match-helper {
   margin-top: 6px;
   font-size: 0.85rem;
