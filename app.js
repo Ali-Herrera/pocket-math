@@ -1603,13 +1603,18 @@ function recordMonthlyActuals() {
   document.querySelector('.modal-header h2').textContent =
     `Record Actual Expenses - ${formatMonthLabel(displayMonth)}`;
 
-  // Build modal content with current predicted values
+  // Load previously saved actuals for this month if they exist
+  const savedRecord = budgetData.monthlyHistory.find((m) => m.month === displayMonth);
+
+  // Build modal content with current predicted values and saved actuals
   let content = '';
 
   // Required Bills
   if (budgetData.requiredBills.length > 0) {
     content += '<div class="modal-section"><h3>Required Bills</h3>';
     budgetData.requiredBills.forEach((bill) => {
+      const savedActual = savedRecord?.actual?.requiredBills?.[bill.id];
+      const actualValue = savedActual !== undefined ? savedActual.amount : bill.amount;
       content += `
                 <div class="modal-item">
                     <div class="input-group">
@@ -1620,7 +1625,7 @@ function recordMonthlyActuals() {
                         <label>Actual Amount</label>
                         <input type="number" class="actual-input" data-category="requiredBills"
                             data-id="${bill.id}" data-name="${bill.name}"
-                            value="${bill.amount}" step="0.01" min="0">
+                            value="${actualValue}" step="0.01" min="0">
                     </div>
                 </div>
             `;
@@ -1632,6 +1637,8 @@ function recordMonthlyActuals() {
   if (budgetData.otherExpenses.length > 0) {
     content += '<div class="modal-section"><h3>Other Expenses</h3>';
     budgetData.otherExpenses.forEach((expense) => {
+      const savedActual = savedRecord?.actual?.otherExpenses?.[expense.id];
+      const actualValue = savedActual !== undefined ? savedActual.amount : expense.amount;
       content += `
                 <div class="modal-item">
                     <div class="input-group">
@@ -1642,7 +1649,7 @@ function recordMonthlyActuals() {
                         <label>Actual Amount</label>
                         <input type="number" class="actual-input" data-category="otherExpenses"
                             data-id="${expense.id}" data-name="${expense.name}"
-                            value="${expense.amount}" step="0.01" min="0">
+                            value="${actualValue}" step="0.01" min="0">
                     </div>
                 </div>
             `;
@@ -1654,6 +1661,8 @@ function recordMonthlyActuals() {
   if (budgetData.savings.length > 0) {
     content += '<div class="modal-section"><h3>Savings</h3>';
     budgetData.savings.forEach((saving) => {
+      const savedActual = savedRecord?.actual?.savings?.[saving.id];
+      const actualValue = savedActual !== undefined ? savedActual.amount : saving.amount;
       content += `
                 <div class="modal-item">
                     <div class="input-group">
@@ -1664,7 +1673,7 @@ function recordMonthlyActuals() {
                         <label>Actual Amount</label>
                         <input type="number" class="actual-input" data-category="savings"
                             data-id="${saving.id}" data-name="${saving.name}"
-                            value="${saving.amount}" step="0.01" min="0">
+                            value="${actualValue}" step="0.01" min="0">
                     </div>
                 </div>
             `;
