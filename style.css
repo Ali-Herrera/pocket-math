@@ -65,6 +65,45 @@ header h1 {
   flex-wrap: wrap;
 }
 
+.file-sync-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+.file-sync-status {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.file-sync-status.connected {
+  color: #86efac;
+}
+
+.file-sync-status.disconnected {
+  color: #fca5a5;
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  white-space: nowrap;
+}
+
+.btn-sm:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .card {
   background: var(--card-bg);
   border-radius: 12px;

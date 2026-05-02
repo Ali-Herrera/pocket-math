@@ -453,9 +453,208 @@ function normalizeAppState() {
   appState.navigatorYear = appState.navigatorYear || displayYear;
 }
 
+// ============ File System Persistence ============
+
+let fileHandle = null;
+
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('budget-file-storage', 1);
+    req.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore('handles', { keyPath: 'id' });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeFileHandle(handle) {
+  try {
+    const db = await openHandleDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put({ id: 'budget', handle });
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    });
+  } catch (e) {
+    console.error('Could not store file handle:', e);
+  }
+}
+
+async function loadStoredFileHandle() {
+  try {
+    const db = await openHandleDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('handles', 'readonly');
+      const req = tx.objectStore('handles').get('budget');
+      req.onsuccess = () => resolve(req.result?.handle || null);
+      req.onerror = reject;
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function clearStoredFileHandle() {
+  try {
+    const db = await openHandleDB();
+    await new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').delete('budget');
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
+    });
+  } catch {
+    // ignore
+  }
+  fileHandle = null;
+}
+
+async function writeToFile() {
+  if (!fileHandle) return;
+  try {
+    let perm = await fileHandle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      perm = await fileHandle.requestPermission({ mode: 'readwrite' });
+    }
+    if (perm !== 'granted') return;
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(appState, null, 2));
+    await writable.close();
+  } catch (e) {
+    console.error('File write failed:', e);
+  }
+}
+
+async function loadFromFileHandle(handle) {
+  const file = await handle.getFile();
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  if (isLegacyFormat(parsed)) {
+    migrateFromLegacyFormat(parsed);
+  } else {
+    appState = parsed;
+    normalizeAppState();
+    loadMonthIntoBudgetData(appState.activeMonth);
+  }
+  migrateIncomeData();
+  migrateDebtData();
+}
+
+async function initFileSync() {
+  if (!('showOpenFilePicker' in window)) {
+    updateFileSyncUI();
+    return;
+  }
+  const stored = await loadStoredFileHandle();
+  if (!stored) {
+    updateFileSyncUI();
+    return;
+  }
+  try {
+    const perm = await stored.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      await loadFromFileHandle(stored);
+      fileHandle = stored;
+      localStorage.setItem('budget-webapp-data', JSON.stringify(appState));
+    } else {
+      fileHandle = stored; // keep reference so reconnect button works
+    }
+  } catch (e) {
+    console.warn('Could not load from file:', e);
+    await clearStoredFileHandle();
+  }
+  updateFileSyncUI();
+}
+
+async function connectOrReconnectFile() {
+  if (!('showOpenFilePicker' in window)) {
+    alert('File storage requires Chrome, Edge (86+), or Safari (15.2+).');
+    return;
+  }
+  if (fileHandle) {
+    try {
+      const perm = await fileHandle.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        await loadFromFileHandle(fileHandle);
+        saveData();
+        renderAll();
+        updateAllCharts();
+        updateFileSyncUI();
+        return;
+      }
+    } catch {
+      // fall through to file picker
+    }
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Budget Data (JSON)', accept: { 'application/json': ['.json'] } }],
+    });
+    await handle.requestPermission({ mode: 'readwrite' });
+    await loadFromFileHandle(handle);
+    fileHandle = handle;
+    await storeFileHandle(handle);
+    saveData();
+    renderAll();
+    updateAllCharts();
+    updateFileSyncUI();
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Could not open file: ' + e.message);
+  }
+}
+
+async function createNewStorageFile() {
+  if (!('showSaveFilePicker' in window)) {
+    alert('File storage requires Chrome, Edge (86+), or Safari (15.2+).');
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'budget-data.json',
+      types: [{ description: 'Budget Data (JSON)', accept: { 'application/json': ['.json'] } }],
+    });
+    syncBudgetDataToState();
+    fileHandle = handle;
+    await storeFileHandle(handle);
+    await writeToFile();
+    updateFileSyncUI();
+    alert('New storage file created! Your data will now be saved to this file.');
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Could not create file: ' + e.message);
+  }
+}
+
+function updateFileSyncUI() {
+  const statusEl = document.getElementById('fileSyncStatus');
+  const connectBtn = document.getElementById('connectFileBtn');
+  const newBtn = document.getElementById('newFileBtn');
+  if (!statusEl) return;
+  if (!('showOpenFilePicker' in window)) {
+    statusEl.textContent = 'File sync not supported in this browser — use Export to back up data';
+    statusEl.className = 'file-sync-status';
+    if (connectBtn) connectBtn.style.display = 'none';
+    if (newBtn) newBtn.style.display = 'none';
+    return;
+  }
+  if (fileHandle) {
+    statusEl.innerHTML = `Saved to file: <strong>${fileHandle.name}</strong>`;
+    statusEl.className = 'file-sync-status connected';
+    if (connectBtn) connectBtn.textContent = 'Open Different File';
+    if (newBtn) newBtn.style.display = 'none';
+  } else {
+    statusEl.innerHTML = '<strong>⚠ Browser storage only</strong> — data will be lost if browser data is cleared';
+    statusEl.className = 'file-sync-status disconnected';
+    if (connectBtn) connectBtn.textContent = 'Open Existing File';
+    if (newBtn) newBtn.style.display = '';
+  }
+}
+
 // Initialize app
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadData();
+  await initFileSync();
   initializeEventListeners();
   renderAll();
   updateAllCharts();
@@ -487,6 +686,7 @@ function checkAndPromptMonthAdvance() {
 function saveData() {
   syncBudgetDataToState();
   localStorage.setItem('budget-webapp-data', JSON.stringify(appState));
+  writeToFile();
 }
 
 function loadData() {
@@ -2622,6 +2822,10 @@ function initializeEventListeners() {
     }
   });
   document.getElementById('clearBtn').addEventListener('click', clearAllData);
+
+  // File sync
+  document.getElementById('connectFileBtn').addEventListener('click', connectOrReconnectFile);
+  document.getElementById('newFileBtn').addEventListener('click', createNewStorageFile);
 }
 
 function closeModal() {
